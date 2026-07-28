@@ -1983,6 +1983,39 @@ export const fr: TranslationResources = {
       },
       agents: {
         unavailable: "Connect to this host to manage agents",
+        keepIdleAgentsAlive: {
+          title: "Garder les agents inactifs en vie",
+          hint: "Empêche Paseo de fermer les agents inactifs, afin que le processus sous-jacent reste en exécution entre les sessions.",
+          accessibilityLabel: "Garder les agents inactifs en vie",
+        },
+        idleAgentTimeout: {
+          title: "Délai d'inactivité",
+          hint: "Minutes avant qu'un agent inactif soit automatiquement fermé. Par défaut : 2.",
+          accessibilityLabel: "Délai d'inactivité en minutes",
+          error: "Saisissez un nombre entier entre 1 et 60.",
+        },
+        maxIdleAgents: {
+          title: "Max. d'agents inactifs",
+          hint: 'Plafond de sécurité. Lorsque "Garder les agents inactifs en vie" est activé, les agents inactifs les plus anciens au-dessus de ce nombre sont supprimés. Par défaut : 20.',
+          accessibilityLabel: "Nombre maximum d'agents inactifs",
+          error: "Saisissez un nombre entier entre 0 et 1000.",
+        },
+        closeIdleAgents: {
+          title: "Fermer les agents inactifs",
+          hint: "{{count}} agent(s) inactif(s) dans le répertoire. Ferme leurs processus ; l'historique est conservé.",
+          cta: "Fermer {{count}}",
+          confirmMessage:
+            "Cela fermera {{count}} agent(s) inactif(s) et arrêtera leurs processus sous-jacents. Vous pouvez reprendre tout agent fermé depuis l'historique.",
+          confirmCta: "Fermer {{count}} agent(s)",
+          errorTitle: "Impossible de fermer les agents inactifs",
+          accessibilityLabel: "Fermer les agents inactifs",
+          resultTitle: "{{closed}} agent(s) fermé(s) ({{failed}} échec)",
+          resultMessage:
+            "{{closed}} sur {{total}} agent(s) inactif(s) fermé(s) dans le répertoire ; {{failed}} échec. Certains peuvent être protégés par des planifications ou avoir des permissions en attente.",
+          resultNoneTitle: "Aucun agent n'a pu être fermé",
+          resultNoneMessage:
+            "Paseo n'a fermé aucun des {{total}} agent(s) inactif(s) dans le répertoire. Ils peuvent être des agents système internes, protégés par des planifications ou avoir des permissions en attente.",
+        },
       },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",

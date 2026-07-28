@@ -314,6 +314,12 @@ function mergeMutableConfigIntoPersistedConfig(params: {
       ...(mutable.terminalProfiles !== undefined
         ? { terminalProfiles: mutable.terminalProfiles }
         : {}),
+      agents: {
+        ...persisted.daemon?.agents,
+        keepIdleAgentsAlive: mutable.agents.keepIdleAgentsAlive,
+        maxIdleAgents: mutable.agents.maxIdleAgents,
+        idleAgentTimeoutMinutes: mutable.agents.idleAgentTimeoutMinutes,
+      },
     },
     agents: nextAgents,
   } as PersistedConfig;

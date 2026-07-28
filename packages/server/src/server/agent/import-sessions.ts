@@ -220,6 +220,7 @@ async function importProviderSessionNow(
         agentManager: input.agentManager,
         agentStorage: input.agentStorage,
         logger: input.logger,
+        allowResumeClosed: true,
       });
       return {
         snapshot,

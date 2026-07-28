@@ -7,6 +7,7 @@ import {
   Monitor,
   Pencil,
   Plus,
+  PowerOff,
   RotateCw,
   SquareTerminal,
   Trash2,
@@ -14,7 +15,7 @@ import {
 import type { TFunction } from "i18next";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Alert, Pressable, Text, View } from "react-native";
+import { Alert, Pressable, Text, TextInput, View } from "react-native";
 import { StyleSheet, useUnistyles, withUnistyles } from "react-native-unistyles";
 import type { TerminalProfile } from "@getpaseo/protocol/messages";
 import {
@@ -43,6 +44,7 @@ import { useDaemonStatus } from "@/desktop/hooks/use-daemon-status";
 import { loadDesktopSettings, useDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { PairDeviceModal } from "@/desktop/components/pair-device-modal";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
+import { useAggregatedAgents } from "@/hooks/use-aggregated-agents";
 import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
 import {
   getHostRuntimeStore,
@@ -274,6 +276,10 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
           <InjectPaseoToolsCard serverId={serverId} />
           <BrowserToolsOptInCard serverId={serverId} />
           <AppendSystemPromptCard serverId={serverId} />
+          <KeepIdleAgentsAliveCard serverId={serverId} />
+          <IdleAgentTimeoutCard serverId={serverId} />
+          <MaxIdleAgentsCard serverId={serverId} />
+          <CloseIdleAgentsCard serverId={serverId} />
         </SettingsSection>
       ) : (
         <View style={[settingsStyles.card, styles.emptyCard]}>
@@ -1044,6 +1050,345 @@ function InjectPaseoToolsCard({ serverId }: { serverId: string }) {
         />
       </View>
     </View>
+  );
+}
+
+function KeepIdleAgentsAliveCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { config, patchConfig } = useDaemonConfig(serverId);
+
+  const handleValueChange = useCallback(
+    (next: boolean) => {
+      void patchConfig({
+        agents: {
+          keepIdleAgentsAlive: next,
+        },
+      });
+    },
+    [patchConfig],
+  );
+
+  if (!isConnected) return null;
+
+  return (
+    <View style={settingsStyles.card} testID="host-page-keep-idle-agents-card">
+      <View style={settingsStyles.row}>
+        <View style={settingsStyles.rowContent}>
+          <Text style={settingsStyles.rowTitle}>
+            {t("settings.host.agents.keepIdleAgentsAlive.title")}
+          </Text>
+          <Text style={settingsStyles.rowHint}>
+            {t("settings.host.agents.keepIdleAgentsAlive.hint")}
+          </Text>
+        </View>
+        <Switch
+          value={config?.agents?.keepIdleAgentsAlive === true}
+          onValueChange={handleValueChange}
+          accessibilityLabel={t("settings.host.agents.keepIdleAgentsAlive.accessibilityLabel")}
+          testID="host-page-keep-idle-agents-switch"
+        />
+      </View>
+    </View>
+  );
+}
+
+function IdleAgentTimeoutCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { config, patchConfig } = useDaemonConfig(serverId);
+  const enabled = config?.agents?.keepIdleAgentsAlive !== true;
+  const value = config?.agents?.idleAgentTimeoutMinutes ?? 2;
+  const [draft, setDraft] = useState<string>(String(value));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(String(value));
+    setError(null);
+  }, [value]);
+
+  const handleCommit = useCallback(() => {
+    const trimmed = draft.trim();
+    if (trimmed.length === 0) {
+      setDraft(String(value));
+      setError(null);
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 1 || parsed > 60) {
+      setError(t("settings.host.agents.idleAgentTimeout.error"));
+      return;
+    }
+    setError(null);
+    void patchConfig({ agents: { idleAgentTimeoutMinutes: parsed } });
+  }, [draft, patchConfig, t, value]);
+
+  if (!isConnected) return null;
+  if (!enabled) return null;
+
+  return (
+    <View style={settingsStyles.card} testID="host-page-idle-agent-timeout-card">
+      <View style={settingsStyles.row}>
+        <View style={settingsStyles.rowContent}>
+          <Text style={settingsStyles.rowTitle}>
+            {t("settings.host.agents.idleAgentTimeout.title")}
+          </Text>
+          <Text style={settingsStyles.rowHint}>
+            {t("settings.host.agents.idleAgentTimeout.hint")}
+          </Text>
+          {error !== null ? (
+            <Text style={settingsStyles.rowHint} testID="host-page-idle-agent-timeout-error">
+              {error}
+            </Text>
+          ) : null}
+        </View>
+        <TextInput
+          value={draft}
+          editable={enabled}
+          onChangeText={setDraft}
+          onBlur={handleCommit}
+          onSubmitEditing={handleCommit}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          maxLength={2}
+          accessibilityLabel={t("settings.host.agents.idleAgentTimeout.accessibilityLabel")}
+          testID="host-page-idle-agent-timeout-input"
+          style={agentCapInputStyles.input}
+        />
+      </View>
+    </View>
+  );
+}
+
+function MaxIdleAgentsCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const { config, patchConfig } = useDaemonConfig(serverId);
+  const enabled = config?.agents?.keepIdleAgentsAlive === true;
+  const value = config?.agents?.maxIdleAgents ?? 20;
+  const [draft, setDraft] = useState<string>(String(value));
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraft(String(value));
+    setError(null);
+  }, [value]);
+
+  const handleCommit = useCallback(() => {
+    const trimmed = draft.trim();
+    if (trimmed.length === 0) {
+      setDraft(String(value));
+      setError(null);
+      return;
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0 || parsed > 1000) {
+      setError(t("settings.host.agents.maxIdleAgents.error"));
+      return;
+    }
+    setError(null);
+    void patchConfig({ agents: { maxIdleAgents: parsed } });
+  }, [draft, patchConfig, t, value]);
+
+  if (!isConnected) return null;
+  if (!enabled) return null;
+
+  return (
+    <View style={settingsStyles.card} testID="host-page-max-idle-agents-card">
+      <View style={settingsStyles.row}>
+        <View style={settingsStyles.rowContent}>
+          <Text style={settingsStyles.rowTitle}>
+            {t("settings.host.agents.maxIdleAgents.title")}
+          </Text>
+          <Text style={settingsStyles.rowHint}>{t("settings.host.agents.maxIdleAgents.hint")}</Text>
+          {error !== null ? (
+            <Text style={settingsStyles.rowHint} testID="host-page-max-idle-agents-error">
+              {error}
+            </Text>
+          ) : null}
+        </View>
+        <TextInput
+          value={draft}
+          editable={enabled}
+          onChangeText={setDraft}
+          onBlur={handleCommit}
+          onSubmitEditing={handleCommit}
+          keyboardType="number-pad"
+          inputMode="numeric"
+          maxLength={4}
+          accessibilityLabel={t("settings.host.agents.maxIdleAgents.accessibilityLabel")}
+          testID="host-page-max-idle-agents-input"
+          style={agentCapInputStyles.input}
+          placeholderTextColor={agentCapInputStyles.placeholder.color}
+        />
+      </View>
+    </View>
+  );
+}
+
+const agentCapInputStyles = StyleSheet.create((theme) => ({
+  input: {
+    minWidth: 64,
+    paddingHorizontal: theme.spacing[3],
+    paddingVertical: theme.spacing[2],
+    borderRadius: theme.borderRadius.md,
+    borderWidth: theme.borderWidth[1],
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface2,
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.sm,
+    textAlign: "right",
+  },
+  placeholder: {
+    color: theme.colors.foregroundMuted,
+  },
+}));
+
+function CloseIdleAgentsCard({ serverId }: { serverId: string }) {
+  const { t } = useTranslation();
+  const { theme } = useUnistyles();
+  const isConnected = useHostRuntimeIsConnected(serverId);
+  const client = useHostRuntimeClient(serverId);
+  const { config } = useDaemonConfig(serverId);
+  const { agents } = useAggregatedAgents();
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
+
+  const keepAlive = config?.agents?.keepIdleAgentsAlive === true;
+  const idleCount = useMemo(
+    () => agents.filter((a) => a.serverId === serverId && a.status === "idle").length,
+    [agents, serverId],
+  );
+
+  const closeIdleHeader = useMemo<SheetHeader>(
+    () => ({ title: t("settings.host.agents.closeIdleAgents.title") }),
+    [t],
+  );
+  const destructiveTextStyle = useMemo(
+    () => ({ color: theme.colors.destructive }),
+    [theme.colors.destructive],
+  );
+  const closeIcon = useMemo(
+    () => <PowerOff size={theme.iconSize.sm} color={theme.colors.destructive} />,
+    [theme.iconSize.sm, theme.colors.destructive],
+  );
+
+  const handleOpenConfirm = useCallback(() => setIsConfirming(true), []);
+  const handleCloseConfirm = useCallback(() => {
+    if (!isClosing) setIsConfirming(false);
+  }, [isClosing]);
+  const handleCancel = useCallback(() => setIsConfirming(false), []);
+
+  const showCloseResultAlert = useCallback(
+    (result: { closedAgentIds: string[]; failedAgentIds: string[] }) => {
+      const closed = result.closedAgentIds.length;
+      const failed = result.failedAgentIds.length;
+      const total = closed + failed;
+      if (total === 0) {
+        Alert.alert(
+          t("settings.host.agents.closeIdleAgents.resultNoneTitle"),
+          t("settings.host.agents.closeIdleAgents.resultNoneMessage", { total: idleCount }),
+        );
+        return;
+      }
+      Alert.alert(
+        t("settings.host.agents.closeIdleAgents.resultTitle", {
+          closed,
+          failed,
+        }),
+        t("settings.host.agents.closeIdleAgents.resultMessage", {
+          closed,
+          failed,
+          total: idleCount,
+        }),
+      );
+    },
+    [idleCount, t],
+  );
+
+  const handleConfirmClose = useCallback(() => {
+    if (!client) return undefined;
+    setIsClosing(true);
+    return client
+      .closeIdleAgents()
+      .then((result) => {
+        setIsConfirming(false);
+        showCloseResultAlert(result);
+        return undefined;
+      })
+      .catch((error: unknown) => {
+        Alert.alert(
+          t("settings.host.agents.closeIdleAgents.errorTitle"),
+          error instanceof Error ? error.message : String(error),
+        );
+        return undefined;
+      })
+      .finally(() => setIsClosing(false));
+  }, [client, showCloseResultAlert, t]);
+
+  if (!isConnected || !keepAlive) return null;
+
+  return (
+    <>
+      <View style={settingsStyles.card} testID="host-page-close-idle-agents-card">
+        <View style={settingsStyles.row}>
+          <View style={settingsStyles.rowContent}>
+            <Text style={settingsStyles.rowTitle}>
+              {t("settings.host.agents.closeIdleAgents.title")}
+            </Text>
+            <Text style={settingsStyles.rowHint}>
+              {t("settings.host.agents.closeIdleAgents.hint", { count: idleCount })}
+            </Text>
+          </View>
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={closeIcon}
+            textStyle={destructiveTextStyle}
+            disabled={idleCount === 0 || isClosing}
+            onPress={handleOpenConfirm}
+            testID="host-page-close-idle-agents-button"
+          >
+            {t("settings.host.agents.closeIdleAgents.cta", { count: idleCount })}
+          </Button>
+        </View>
+      </View>
+
+      {isConfirming ? (
+        <AdaptiveModalSheet
+          header={closeIdleHeader}
+          visible
+          onClose={handleCloseConfirm}
+          testID="close-idle-agents-confirm-modal"
+        >
+          <Text style={styles.confirmText}>
+            {t("settings.host.agents.closeIdleAgents.confirmMessage", { count: idleCount })}
+          </Text>
+          <View style={styles.confirmActions}>
+            <Button
+              variant="secondary"
+              size="sm"
+              style={FLEX_1_STYLE}
+              onPress={handleCancel}
+              disabled={isClosing}
+            >
+              {t("common.actions.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              style={FLEX_1_STYLE}
+              onPress={handleConfirmClose}
+              disabled={isClosing}
+              loading={isClosing}
+              testID="close-idle-agents-confirm"
+            >
+              {t("settings.host.agents.closeIdleAgents.confirmCta", { count: idleCount })}
+            </Button>
+          </View>
+        </AdaptiveModalSheet>
+      ) : null}
+    </>
   );
 }
 

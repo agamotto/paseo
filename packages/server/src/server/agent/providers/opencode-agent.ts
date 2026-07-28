@@ -1748,7 +1748,8 @@ type OpenCodeTraceMessage =
   | "provider.opencode.parsed_event.skip_active"
   | "provider.opencode.event.terminal"
   | "provider.opencode.finish_foreground_turn"
-  | "provider.opencode.event_emit";
+  | "provider.opencode.event_emit"
+  | "provider.opencode.session.lost_idle";
 
 type OpenCodeToolPartEventPart = Extract<
   Extract<OpenCodeEvent, { type: "message.part.updated" }>["properties"]["part"],
@@ -3504,6 +3505,9 @@ class OpenCodeAgentSession implements AgentSession {
 
       let eventCount = 0;
       for await (const rawEvent of result.stream) {
+        if (eventStreamAbortController.signal.aborted) {
+          break;
+        }
         eventCount += 1;
         await this.consumeOpenCodeStreamEvent({ rawEvent, eventCount });
       }
@@ -3532,6 +3536,11 @@ class OpenCodeAgentSession implements AgentSession {
             },
             activeTurnId,
           );
+        } else if (this.turnState.status !== "stopping") {
+          // Stream ended while the agent was idle — the underlying opencode
+          // process has died. Without this branch the agent would stay in
+          // "idle" forever and the directory would accumulate ghost entries.
+          this.handleIdleSessionLost("event stream ended while idle");
         }
       }
     } catch (error) {
@@ -3553,8 +3562,37 @@ class OpenCodeAgentSession implements AgentSession {
           },
           activeTurnId,
         );
+      } else if (
+        !eventStreamAbortController.signal.aborted &&
+        this.turnState.status !== "stopping"
+      ) {
+        this.handleIdleSessionLost(
+          `OpenCode event stream failed while idle: ${toDiagnosticErrorMessage(error)}`,
+        );
       }
     }
+  }
+
+  private handleIdleSessionLost(reason: string): void {
+    if (this.closed) {
+      return;
+    }
+    this.traceOpenCode("provider.opencode.session.lost_idle", { reason });
+    // Emit a synthetic turn_failed so the agent manager transitions the
+    // agent's lifecycle from "idle" to "error". Without this the agent
+    // lingers in the directory with no underlying process.
+    this.notifySubscribers({ type: "turn_failed", provider: "opencode", error: reason }, null);
+    // Release the opencode server refcount so the (already-dead) process
+    // record is cleaned up by OpenCodeServerManager. Fire-and-forget so we
+    // don't deadlock waiting on the current event-stream task.
+    queueMicrotask(() => {
+      void this.close().catch((error) => {
+        this.logger.debug(
+          { err: error, sessionId: this.sessionId },
+          "OpenCode session cleanup after idle-stream loss failed",
+        );
+      });
+    });
   }
 
   private async consumeOpenCodeStreamEvent(params: {
@@ -3973,10 +4011,19 @@ class OpenCodeAgentSession implements AgentSession {
       const eventStreamTask = this.eventStreamTask;
       this.eventStreamAbortController?.abort();
       if (eventStreamTask) {
-        await eventStreamTask.catch((error) => {
+        await withTimeout(
+          eventStreamTask.catch((error) => {
+            this.logger.debug(
+              { err: error, sessionId: this.sessionId },
+              "OpenCode event stream failed during close",
+            );
+          }),
+          5_000,
+          "OpenCode event stream did not settle within 5s during close",
+        ).catch((error) => {
           this.logger.debug(
             { err: error, sessionId: this.sessionId },
-            "OpenCode event stream failed during close",
+            "OpenCode event stream timed out during close; continuing with cleanup",
           );
         });
       }

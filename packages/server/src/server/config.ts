@@ -419,6 +419,20 @@ function resolveBrowserToolsEnabled(persisted: ReturnType<typeof loadPersistedCo
   return persisted.daemon?.browserTools?.enabled ?? false;
 }
 
+function resolveAgentsKeepIdleAlive(persisted: ReturnType<typeof loadPersistedConfig>): boolean {
+  return persisted.daemon?.agents?.keepIdleAgentsAlive ?? false;
+}
+
+function resolveAgentsMaxIdleAgents(persisted: ReturnType<typeof loadPersistedConfig>): number {
+  return persisted.daemon?.agents?.maxIdleAgents ?? 20;
+}
+
+function resolveAgentsIdleTimeoutMinutes(
+  persisted: ReturnType<typeof loadPersistedConfig>,
+): number {
+  return persisted.daemon?.agents?.idleAgentTimeoutMinutes ?? 2;
+}
+
 function resolveStaticLoadConfigSettings(
   env: NodeJS.ProcessEnv,
   cli: CliConfigOverrides | undefined,
@@ -432,6 +446,9 @@ function resolveStaticLoadConfigSettings(
     autoArchiveAfterMerge: persisted.daemon?.autoArchiveAfterMerge ?? false,
     appendSystemPrompt: resolveAppendSystemPrompt(persisted),
     terminalProfiles: persisted.daemon?.terminalProfiles,
+    keepIdleAgentsAlive: resolveAgentsKeepIdleAlive(persisted),
+    maxIdleAgents: resolveAgentsMaxIdleAgents(persisted),
+    idleAgentTimeoutMinutes: resolveAgentsIdleTimeoutMinutes(persisted),
     hostnames: mergeHostnames([
       persisted.daemon?.hostnames,
       parseHostnamesEnv(env.PASEO_HOSTNAMES ?? env.PASEO_ALLOWED_HOSTS),
@@ -460,6 +477,9 @@ export function loadConfig(
     autoArchiveAfterMerge,
     appendSystemPrompt,
     terminalProfiles,
+    keepIdleAgentsAlive,
+    maxIdleAgents,
+    idleAgentTimeoutMinutes,
     hostnames,
     trustedProxies,
     appBaseUrl,
@@ -500,6 +520,9 @@ export function loadConfig(
     enableTerminalAgentHooks: persisted.daemon?.enableTerminalAgentHooks ?? false,
     appendSystemPrompt,
     terminalProfiles,
+    keepIdleAgentsAlive,
+    maxIdleAgents,
+    idleAgentTimeoutMinutes,
     mcpDebug: env.MCP_DEBUG === "1",
     isDev: resolvePaseoNodeEnv(env) === "development",
     agentStoragePath: path.join(paseoHome, "agents"),

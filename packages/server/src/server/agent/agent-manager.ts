@@ -1374,6 +1374,10 @@ export class AgentManager {
     return close;
   }
 
+  isAgentClosing(agentId: string): boolean {
+    return this.inFlightAgentCloses.has(agentId);
+  }
+
   private async closeAgentRuntime(agentId: string): Promise<void> {
     const agent = this.requireAgent(agentId);
     this.logger.trace(
@@ -1448,11 +1452,7 @@ export class AgentManager {
         continue;
       }
 
-      const entry: IdleAgentCollectionEntry = {
-        agentId: current.id,
-        provider: current.provider,
-        ...(current.persistence?.sessionId ? { sessionId: current.persistence.sessionId } : {}),
-      };
+      const entry = this.buildIdleAgentCollectionEntry(current);
       try {
         await this.closeAgent(current.id);
         result.collected.push(entry);
@@ -1462,6 +1462,61 @@ export class AgentManager {
     }
 
     return result;
+  }
+
+  async enforceIdleAgentCap(options: {
+    maxIdleAgents: number;
+    protectedAgentIds: ReadonlySet<string>;
+  }): Promise<IdleAgentCollectionResult> {
+    const result: IdleAgentCollectionResult = { collected: [], failures: [] };
+
+    if (options.maxIdleAgents < 0) {
+      return result;
+    }
+
+    const eligible = Array.from(this.agents.values()).filter((agent) => {
+      const current = this.agents.get(agent.id);
+      if (!current) {
+        return false;
+      }
+      return this.isIdleAgentEligibleForCap(current, options.protectedAgentIds);
+    });
+
+    const surplus = eligible.length - options.maxIdleAgents;
+    if (surplus <= 0) {
+      return result;
+    }
+
+    const victims = [...eligible]
+      .sort((a, b) => a.updatedAt.getTime() - b.updatedAt.getTime())
+      .slice(0, surplus);
+
+    for (const victim of victims) {
+      const current = this.agents.get(victim.id);
+      if (!current) {
+        continue;
+      }
+      if (!this.isIdleAgentEligibleForCap(current, options.protectedAgentIds)) {
+        continue;
+      }
+      const entry = this.buildIdleAgentCollectionEntry(current);
+      try {
+        await this.closeAgent(current.id);
+        result.collected.push(entry);
+      } catch (error) {
+        result.failures.push({ ...entry, error });
+      }
+    }
+
+    return result;
+  }
+
+  private buildIdleAgentCollectionEntry(agent: LiveManagedAgent): IdleAgentCollectionEntry {
+    return {
+      agentId: agent.id,
+      provider: agent.provider,
+      ...(agent.persistence?.sessionId ? { sessionId: agent.persistence.sessionId } : {}),
+    };
   }
 
   private isIdleAgentCollectable(
@@ -1494,6 +1549,22 @@ export class AgentManager {
     return this.providerSubagents
       .list(parentAgentId)
       .some((subagent) => subagent.status === "running");
+  }
+
+  private isIdleAgentEligibleForCap(
+    agent: LiveManagedAgent,
+    protectedAgentIds: ReadonlySet<string>,
+  ): agent is ManagedAgentIdle {
+    return (
+      agent.lifecycle === "idle" &&
+      !agent.internal &&
+      !protectedAgentIds.has(agent.id) &&
+      agent.activeForegroundTurnId === null &&
+      !this.runs.hasRun(agent.id) &&
+      !agent.pendingReplacement &&
+      agent.pendingPermissions.size === 0 &&
+      agent.inFlightPermissionResponses.size === 0
+    );
   }
 
   async archiveAgent(agentId: string): Promise<{ archivedAt: string }> {

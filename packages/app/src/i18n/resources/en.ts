@@ -1942,6 +1942,39 @@ export const en = {
       },
       agents: {
         unavailable: "Connect to this host to manage agents",
+        keepIdleAgentsAlive: {
+          title: "Keep idle agents alive",
+          hint: "Prevents Paseo from closing agents that have been idle, so the underlying agent process stays running between sessions.",
+          accessibilityLabel: "Keep idle agents alive",
+        },
+        idleAgentTimeout: {
+          title: "Idle agent timeout",
+          hint: "Minutes before an idle agent is automatically closed. Default: 2.",
+          accessibilityLabel: "Idle agent timeout in minutes",
+          error: "Enter a whole number between 1 and 60.",
+        },
+        maxIdleAgents: {
+          title: "Max idle agents",
+          hint: 'Safety cap. When "Keep idle agents alive" is on, the oldest idle agents above this count are pruned. Default: 20.',
+          accessibilityLabel: "Max idle agents",
+          error: "Enter a whole number between 0 and 1000.",
+        },
+        closeIdleAgents: {
+          title: "Close idle agents",
+          hint: "{{count}} idle agent(s) in the directory. Closes their runtimes; history is preserved.",
+          cta: "Close {{count}}",
+          confirmMessage:
+            "This will close {{count}} idle agent(s) and stop their underlying processes. You can resume any closed agent from history.",
+          confirmCta: "Close {{count}} agent(s)",
+          errorTitle: "Unable to close idle agents",
+          accessibilityLabel: "Close idle agents",
+          resultTitle: "Closed {{closed}} agent(s) ({{failed}} failed)",
+          resultMessage:
+            "Closed {{closed}} of {{total}} idle agent(s) in the directory; {{failed}} failed. Some agents may be protected by schedules or have pending permissions.",
+          resultNoneTitle: "No agents were closeable",
+          resultNoneMessage:
+            "Paseo did not close any of the {{total}} idle agent(s) in the directory. They may be internal system agents, protected by schedules, or have pending permissions.",
+        },
       },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",

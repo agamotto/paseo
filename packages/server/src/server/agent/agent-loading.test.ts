@@ -66,8 +66,18 @@ test("loads archived records for history and active records with the interactive
     });
     await manager.closeAgent(active.id);
 
-    await ensureAgentLoaded(archived.id, { agentManager: manager, agentStorage: storage, logger });
-    await ensureAgentLoaded(active.id, { agentManager: manager, agentStorage: storage, logger });
+    await ensureAgentLoaded(archived.id, {
+      agentManager: manager,
+      agentStorage: storage,
+      logger,
+      allowResumeClosed: true,
+    });
+    await ensureAgentLoaded(active.id, {
+      agentManager: manager,
+      agentStorage: storage,
+      logger,
+      allowResumeClosed: true,
+    });
 
     expect(resumeOptions).toEqual([{ purpose: "history" }, undefined]);
   } finally {

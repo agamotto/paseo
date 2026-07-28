@@ -696,6 +696,7 @@ test("config actions delegate to existing daemon config RPCs", async () => {
       autoArchiveAfterMerge: false,
       enableTerminalAgentHooks: false,
       appendSystemPrompt: "",
+      agents: { keepIdleAgentsAlive: false, maxIdleAgents: 20, idleAgentTimeoutMinutes: 2 },
     },
   });
 
@@ -751,6 +752,7 @@ test("config actions delegate to existing daemon config RPCs", async () => {
       autoArchiveAfterMerge: false,
       enableTerminalAgentHooks: false,
       appendSystemPrompt: "",
+      agents: { keepIdleAgentsAlive: false, maxIdleAgents: 20, idleAgentTimeoutMinutes: 2 },
     },
   });
 

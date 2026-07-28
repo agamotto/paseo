@@ -1964,6 +1964,39 @@ export const ptBR: TranslationResources = {
       },
       agents: {
         unavailable: "Conecte-se a este host para gerenciar agentes",
+        keepIdleAgentsAlive: {
+          title: "Manter agentes ociosos ativos",
+          hint: "Impede que o Paseo feche agentes que ficaram ociosos, para que o processo do agente subjacente continue em execução entre sessões.",
+          accessibilityLabel: "Manter agentes ociosos ativos",
+        },
+        idleAgentTimeout: {
+          title: "Tempo limite de ociosidade",
+          hint: "Minutos antes que um agente ocioso seja fechado automaticamente. Padrão: 2.",
+          accessibilityLabel: "Tempo limite de ociosidade em minutos",
+          error: "Digite um número inteiro entre 1 e 60.",
+        },
+        maxIdleAgents: {
+          title: "Máx. de agentes ociosos",
+          hint: 'Limite de segurança. Quando "Manter agentes ociosos ativos" estiver ativado, os agentes ociosos mais antigos acima desse número serão removidos. Padrão: 20.',
+          accessibilityLabel: "Máximo de agentes ociosos",
+          error: "Digite um número inteiro entre 0 e 1000.",
+        },
+        closeIdleAgents: {
+          title: "Fechar agentes ociosos",
+          hint: "{{count}} agente(s) ocioso(s) no diretório. Fecha seus processos; o histórico é preservado.",
+          cta: "Fechar {{count}}",
+          confirmMessage:
+            "Isso fechará {{count}} agente(s) ocioso(s) e interromperá seus processos subjacentes. Você pode retomar qualquer agente fechado pelo histórico.",
+          confirmCta: "Fechar {{count}} agente(s)",
+          errorTitle: "Não foi possível fechar os agentes ociosos",
+          accessibilityLabel: "Fechar agentes ociosos",
+          resultTitle: "{{closed}} agente(s) fechado(s) ({{failed}} com falha)",
+          resultMessage:
+            "{{closed}} de {{total}} agente(s) ocioso(s) no diretório foram fechados; {{failed}} falharam. Alguns podem estar protegidos por agendamentos ou ter permissões pendentes.",
+          resultNoneTitle: "Nenhum agente pôde ser fechado",
+          resultNoneMessage:
+            "O Paseo não fechou nenhum dos {{total}} agente(s) ocioso(s) no diretório. Eles podem ser agentes internos do sistema, protegidos por agendamentos ou ter permissões pendentes.",
+        },
       },
       workspaces: {
         unavailable: "Conecte-se a este host para gerenciar workspaces",

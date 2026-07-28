@@ -17,6 +17,7 @@ import {
   type WorkspaceScriptStartRequest,
   type WorkspaceScriptStopRequest,
   type CloseItemsRequest,
+  type CloseIdleAgentsRequest,
   type DirectorySuggestionsRequest,
   type ProjectPlacementPayload,
   type WorkspaceSetupSnapshot,
@@ -34,7 +35,11 @@ import { SortablePager, type SortSpec } from "./pagination/sortable-pager.js";
 import type { SpeechToTextProvider, TextToSpeechProvider } from "./speech/speech-provider.js";
 import type { TurnDetectionProvider } from "./speech/turn-detection-provider.js";
 import { isStoredAgentProviderAvailable, toAgentPersistenceHandle } from "./persistence-hooks.js";
-import { ensureAgentLoaded, ensureUnarchivedAgentLoaded } from "./agent/agent-loading.js";
+import {
+  ensureAgentLoaded,
+  ensureUnarchivedAgentLoaded,
+  AgentClosedError,
+} from "./agent/agent-loading.js";
 import {
   formatSystemNotificationPrompt,
   sendPromptToAgent,
@@ -82,6 +87,7 @@ import {
   archiveAgentCommand,
   cancelAgentRunCommand,
   closeAgentCommand,
+  collectIdleAgentsCommand,
   detachAgentCommand,
   setAgentModeCommand,
   updateAgentCommand,
@@ -632,6 +638,7 @@ export class Session {
   private readonly voiceSession: VoiceSession;
   private readonly checkoutSession: CheckoutSession;
   private readonly chatScheduleLoopSession: ChatScheduleLoopSession;
+  private readonly scheduleService: ScheduleService;
   private readonly providerCatalogSession: ProviderCatalogSession;
   private readonly workspaceFilesSession: WorkspaceFilesSession;
   private readonly agentConfigSession: AgentConfigSession;
@@ -814,6 +821,7 @@ export class Session {
       clientId: this.clientId,
       logger: this.sessionLogger,
     });
+    this.scheduleService = scheduleService;
     this.providerCatalogSession = new ProviderCatalogSession({
       host: {
         emit: (msg) => this.emit(msg),
@@ -836,6 +844,7 @@ export class Session {
             agentManager,
             agentStorage,
             logger: this.sessionLogger,
+            allowResumeClosed: true,
           });
         },
         setMode: async (agentId, modeId) =>
@@ -971,6 +980,7 @@ export class Session {
             agentManager: this.agentManager,
             agentStorage: this.agentStorage,
             logger: this.sessionLogger,
+            allowResumeClosed: true,
           }),
         reloadAgentSession: (agentId, overrides) =>
           this.agentManager.reloadAgentSession(agentId, overrides),
@@ -1930,6 +1940,8 @@ export class Session {
         return this.handleArchiveAgentRequest(msg.agentId, msg.requestId);
       case "close_items_request":
         return this.handleCloseItemsRequest(msg);
+      case "close_idle_agents_request":
+        return this.handleCloseIdleAgentsRequest(msg);
       case "update_agent_request":
         return this.handleUpdateAgentRequest(msg.agentId, msg.name, msg.labels, msg.requestId);
       case "project.rename.request":
@@ -2496,6 +2508,34 @@ export class Session {
         requestId: msg.requestId,
       },
     });
+  }
+
+  private async handleCloseIdleAgentsRequest(msg: CloseIdleAgentsRequest): Promise<void> {
+    try {
+      const result = await collectIdleAgentsCommand({
+        agentManager: this.agentManager,
+        scheduleService: this.scheduleService,
+      });
+      this.emit({
+        type: "close_idle_agents_response",
+        payload: {
+          closedAgentIds: result.collected.map((entry) => entry.agentId),
+          failedAgentIds: result.failures.map((entry) => entry.agentId),
+          requestId: msg.requestId,
+        },
+      });
+    } catch (error) {
+      this.sessionLogger.error({ err: error }, "Failed to close idle agents");
+      this.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: "close_idle_agents_request",
+          error: error instanceof Error ? error.message : String(error),
+          code: "close_idle_agents_failed",
+        },
+      });
+    }
   }
 
   private async unarchiveAgentByHandle(handle: AgentPersistenceHandle): Promise<void> {
@@ -3351,6 +3391,7 @@ export class Session {
           agentStorage: this.agentStorage,
           broadcastTimeline: true,
           logger: this.sessionLogger,
+          allowResumeClosed: true,
         });
       }
       await this.agentManager.hydrateTimelineFromProvider(agentId, { broadcast: true });
@@ -3537,6 +3578,7 @@ export class Session {
             agentManager: this.agentManager,
             agentStorage: this.agentStorage,
             logger: this.sessionLogger,
+            allowResumeClosed: true,
           }),
         ),
       );
@@ -3634,6 +3676,7 @@ export class Session {
               agentManager: this.agentManager,
               agentStorage: this.agentStorage,
               logger: this.sessionLogger,
+              allowResumeClosed: true,
             })
           : null;
 
@@ -3876,7 +3919,16 @@ export class Session {
           filter?.includeUnavailablePersisted === true ||
           isStoredAgentProviderAvailable(record, registeredProviderIds),
       )
-      .map((record) => this.buildStoredAgentPayload(record, registeredProviderIds));
+      .map((record) => {
+        const payload = this.buildStoredAgentPayload(record, registeredProviderIds);
+        // Agents being closed (in-flight closeAgentRuntime) still have their
+        // original lastStatus in storage. Override to "closed" so the client
+        // doesn't count them as idle while the close is in progress.
+        if (payload.status !== "closed" && this.agentManager.isAgentClosing(record.id)) {
+          payload.status = "closed";
+        }
+        return payload;
+      });
 
     let agents = [...liveAgents, ...persistedAgents];
 
@@ -6099,6 +6151,32 @@ export class Session {
         },
       });
     } catch (error) {
+      if (error instanceof AgentClosedError) {
+        const record = await this.agentStorage.get(msg.agentId);
+        const agentPayload = record ? this.buildStoredAgentPayload(record) : null;
+        this.emit({
+          type: "fetch_agent_timeline_response",
+          payload: {
+            requestId: msg.requestId,
+            agentId: msg.agentId,
+            agent: agentPayload,
+            direction,
+            projection,
+            epoch: "",
+            reset: false,
+            staleCursor: false,
+            gap: false,
+            window: { minSeq: 0, maxSeq: 0, nextSeq: 0 },
+            startCursor: null,
+            endCursor: null,
+            hasOlder: false,
+            hasNewer: false,
+            entries: [],
+            error: null,
+          },
+        });
+        return;
+      }
       this.sessionLogger.error(
         { err: error, agentId: msg.agentId },
         "Failed to handle fetch_agent_timeline_request",
@@ -6135,6 +6213,7 @@ export class Session {
         agentManager: this.agentManager,
         agentStorage: this.agentStorage,
         logger: this.sessionLogger,
+        allowResumeClosed: true,
       });
       this.emit({
         type: "agent.provider_subagents.list.response",
@@ -6167,6 +6246,7 @@ export class Session {
         agentManager: this.agentManager,
         agentStorage: this.agentStorage,
         logger: this.sessionLogger,
+        allowResumeClosed: true,
       });
       const descriptor = this.agentManager.getProviderSubagent(msg.parentAgentId, msg.subagentId);
       if (!descriptor) {
@@ -6235,6 +6315,7 @@ export class Session {
         agentManager: this.agentManager,
         agentStorage: this.agentStorage,
         logger: this.sessionLogger,
+        allowResumeClosed: true,
       });
       const agentPayload = await this.buildAgentPayload(snapshot);
       const timeline = this.agentManager.fetchTimeline(msg.agentId, {

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -72,5 +72,37 @@ describe("server config", () => {
         resourcesPath: packageRoot,
       }),
     ).toBe(path.join(packageRoot, "app-dist"));
+  });
+
+  test("reads agents.keepIdleAgentsAlive and agents.maxIdleAgents from persisted config", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-agents-"));
+    roots.push(paseoHome);
+    await writeFile(
+      path.join(paseoHome, "config.json"),
+      JSON.stringify({
+        version: 1,
+        daemon: {
+          agents: {
+            keepIdleAgentsAlive: true,
+            maxIdleAgents: 7,
+          },
+        },
+      }),
+    );
+
+    const config = loadConfig(paseoHome, { env: {} });
+
+    expect(config.keepIdleAgentsAlive).toBe(true);
+    expect(config.maxIdleAgents).toBe(7);
+  });
+
+  test("defaults agents.keepIdleAgentsAlive to false and maxIdleAgents to 20 when absent", async () => {
+    const paseoHome = await mkdtemp(path.join(os.tmpdir(), "paseo-config-agents-default-"));
+    roots.push(paseoHome);
+
+    const config = loadConfig(paseoHome, { env: {} });
+
+    expect(config.keepIdleAgentsAlive).toBe(false);
+    expect(config.maxIdleAgents).toBe(20);
   });
 });

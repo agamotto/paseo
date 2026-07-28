@@ -1910,6 +1910,39 @@ export const zhCN: TranslationResources = {
       },
       agents: {
         unavailable: "连接到这个 Host 以管理 Agent",
+        keepIdleAgentsAlive: {
+          title: "保持空闲代理活跃",
+          hint: "防止 Paseo 关闭空闲代理，使下层代理进程在会话间隔保持运行。",
+          accessibilityLabel: "保持空闲代理活跃",
+        },
+        idleAgentTimeout: {
+          title: "空闲超时",
+          hint: "空闲代理自动关闭前的分钟数。默认：2。",
+          accessibilityLabel: "空闲超时（分钟）",
+          error: "请输入 1 到 60 之间的整数。",
+        },
+        maxIdleAgents: {
+          title: "空闲代理上限",
+          hint: '安全上限。开启"保持空闲代理活跃"后，超过此数量的最旧空闲代理会被删除。默认：20。',
+          accessibilityLabel: "空闲代理最大数",
+          error: "请输入 0 到 1000 之间的整数。",
+        },
+        closeIdleAgents: {
+          title: "关闭空闲代理",
+          hint: "目录中有 {{count}} 个空闲代理。关闭它们的运行时；历史会保留。",
+          cta: "关闭 {{count}}",
+          confirmMessage:
+            "这将关闭 {{count}} 个空闲代理并停止其底层进程。你可以从历史中恢复任何已关闭的代理。",
+          confirmCta: "关闭 {{count}} 个代理",
+          errorTitle: "无法关闭空闲代理",
+          accessibilityLabel: "关闭空闲代理",
+          resultTitle: "已关闭 {{closed}} 个代理（{{failed}} 失败）",
+          resultMessage:
+            "目录中 {{total}} 个空闲代理中已关闭 {{closed}} 个；{{failed}} 失败。部分可能受计划任务保护或有未决权限。",
+          resultNoneTitle: "没有可关闭的代理",
+          resultNoneMessage:
+            "Paseo 没有关闭目录中任何 {{total}} 个空闲代理。它们可能是内部系统代理、受计划任务保护或有待处理权限。",
+        },
       },
       workspaces: {
         unavailable: "连接到这个 Host 以管理 Workspace",

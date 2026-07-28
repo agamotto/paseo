@@ -824,7 +824,7 @@ function ChatAgentContent({
     findActiveCreateHandoff({ pendingByDraftId: state.pendingByDraftId, serverId, agentId }),
   );
   const hasSession = useSessionStore((state) => Boolean(state.sessions[serverId]));
-  const { ensureAgentIsInitialized } = useAgentInitialization({
+  const { ensureAgentIsInitialized, refreshAgent } = useAgentInitialization({
     serverId,
     client: hasSession ? client : null,
   });
@@ -976,6 +976,29 @@ function ChatAgentContent({
     setMissingAgentState({ kind: "idle" });
   }, [agentId, serverId]);
 
+  const handleResumeClosedAgent = useCallback(() => {
+    if (!agentId) {
+      return;
+    }
+    if (
+      missingAgentState.kind === "resolving" ||
+      missingAgentState.kind === "not_found" ||
+      missingAgentState.kind === "error"
+    ) {
+      return;
+    }
+    setMissingAgentState({ kind: "resolving" });
+    const attemptToken = ++initAttemptTokenRef.current;
+    refreshAgent(agentId).catch((error) => {
+      if (attemptToken !== initAttemptTokenRef.current) {
+        return;
+      }
+      setMissingAgentState({ kind: "error", message: toErrorMessage(error) });
+    });
+  }, [agentId, missingAgentState.kind, refreshAgent]);
+
+  const canInitialize = Boolean(client) && isPaneVisible && isConnected && hasSession;
+
   useEffect(() => {
     if (!agentId) {
       return;
@@ -983,7 +1006,7 @@ function ChatAgentContent({
     if (agentState.archivedAt) {
       return;
     }
-    if (agentState.id && hasAppliedAuthoritativeHistory) {
+    if (agentState.id && hasAppliedAuthoritativeHistory && agentState.status !== "closed") {
       if (
         missingAgentState.kind === "resolving" ||
         missingAgentState.kind === "not_found" ||
@@ -993,7 +1016,11 @@ function ChatAgentContent({
       }
       return;
     }
-    if (!client || !isPaneVisible || !isConnected || !hasSession) {
+    if (agentState.status === "closed" && canInitialize) {
+      handleResumeClosedAgent();
+      return;
+    }
+    if (!canInitialize || !client) {
       return;
     }
     if (
@@ -1049,13 +1076,13 @@ function ChatAgentContent({
   }, [
     agentState.id,
     agentState.archivedAt,
+    agentState.status,
     hasAppliedAuthoritativeHistory,
     agentId,
+    canInitialize,
     client,
     ensureAgentIsInitialized,
-    hasSession,
-    isConnected,
-    isPaneVisible,
+    handleResumeClosedAgent,
     missingAgentState.kind,
     serverId,
   ]);

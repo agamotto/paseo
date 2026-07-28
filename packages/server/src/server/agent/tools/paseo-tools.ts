@@ -2999,6 +2999,7 @@ export function createPaseoToolCatalog(options: PaseoToolHostDependencies): Pase
         agentManager,
         agentStorage,
         logger: childLogger,
+        allowResumeClosed: true,
       });
       const timeline = agentManager.getTimeline(agentId);
       const snapshot = agentManager.getAgent(agentId);

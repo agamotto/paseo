@@ -7324,6 +7324,7 @@ test("collectIdleAgents releases an idle runtime and resumes the same agent and 
       agentManager: manager,
       agentStorage: storage,
       logger,
+      allowResumeClosed: true,
     });
 
     expect(resumed.id).toBe(created.id);
@@ -7341,6 +7342,7 @@ test("collectIdleAgents releases an idle runtime and resumes the same agent and 
       agentManager: manager,
       agentStorage: storage,
       logger,
+      allowResumeClosed: true,
     });
     await expect(
       manager.collectIdleAgents({ cutoff: idleBeforeOpen, protectedAgentIds: new Set() }),
@@ -7461,6 +7463,7 @@ test("ensureUnarchivedAgentLoaded closes a runtime archived while it resumes", a
       agentManager: manager,
       agentStorage: storage,
       logger,
+      allowResumeClosed: true,
     });
     await resumeStarted.promise;
     await manager.archiveSnapshot(agent.id, new Date().toISOString());
@@ -7507,6 +7510,7 @@ test("ensureUnarchivedAgentLoaded fences an archived agent after joining a share
       agentManager: manager,
       agentStorage: storage,
       logger,
+      allowResumeClosed: true,
     });
     await resumeStarted.promise;
     const protectedLoad = ensureUnarchivedAgentLoaded(agent.id, {
@@ -7569,6 +7573,7 @@ test("a shared agent load upgrades provider history hydration to broadcast", asy
       agentManager: manager,
       agentStorage: storage,
       logger,
+      allowResumeClosed: true,
     });
     await historyStarted.promise;
     const broadcastingLoad = ensureAgentLoaded(agent.id, {
@@ -7576,6 +7581,7 @@ test("a shared agent load upgrades provider history hydration to broadcast", asy
       agentStorage: storage,
       broadcastTimeline: true,
       logger,
+      allowResumeClosed: true,
     });
     historyAllowed.resolve();
     await Promise.all([quietLoad, broadcastingLoad]);
@@ -7803,6 +7809,7 @@ test("closed provider subagents do not block collection after resume", async () 
       agentManager: manager,
       agentStorage: storage,
       logger,
+      allowResumeClosed: true,
     });
 
     expect(manager.getProviderSubagent(parent.id, "provider-child-running")?.status).toBe(
@@ -7864,8 +7871,18 @@ test("load waits for an in-flight collection close and creates only one resumed 
     });
     await closeStarted.promise;
     const loads = Promise.all([
-      ensureAgentLoaded(created.id, { agentManager: manager, agentStorage: storage, logger }),
-      ensureAgentLoaded(created.id, { agentManager: manager, agentStorage: storage, logger }),
+      ensureAgentLoaded(created.id, {
+        agentManager: manager,
+        agentStorage: storage,
+        logger,
+        allowResumeClosed: true,
+      }),
+      ensureAgentLoaded(created.id, {
+        agentManager: manager,
+        agentStorage: storage,
+        logger,
+        allowResumeClosed: true,
+      }),
     ]);
 
     expect(client.resumeCount).toBe(0);
@@ -7922,11 +7939,111 @@ test("provider close failure still persists and emits a resumable closed agent",
     expect(stored?.archivedAt).toBeFalsy();
 
     await expect(
-      ensureAgentLoaded(created.id, { agentManager: manager, agentStorage: storage, logger }),
+      ensureAgentLoaded(created.id, {
+        agentManager: manager,
+        agentStorage: storage,
+        logger,
+        allowResumeClosed: true,
+      }),
     ).resolves.toMatchObject({ id: created.id, lifecycle: "idle" });
   } finally {
     await manager.closeAgent("00000000-0000-4000-8000-000000000217").catch(() => undefined);
     await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("enforceIdleAgentCap closes the oldest surplus idle agents and protects the rest", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-idle-cap-"));
+  const storage = new AgentStorage(join(workdir, "agents"), logger);
+  const ids = [
+    "00000000-0000-4000-8000-000000000310",
+    "00000000-0000-4000-8000-000000000311",
+    "00000000-0000-4000-8000-000000000312",
+    "00000000-0000-4000-8000-000000000313",
+    "00000000-0000-4000-8000-000000000314",
+  ];
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    registry: storage,
+    logger,
+    idFactory: () => ids.shift()!,
+  });
+
+  try {
+    const a = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const b = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const c = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+    const d = await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+
+    // No-op when count is at or below the cap.
+    await expect(
+      manager.enforceIdleAgentCap({ maxIdleAgents: 4, protectedAgentIds: new Set() }),
+    ).resolves.toEqual({ collected: [], failures: [] });
+
+    // Surplus of 1: closes the oldest (a) by updatedAt.
+    const surplusOne = await manager.enforceIdleAgentCap({
+      maxIdleAgents: 3,
+      protectedAgentIds: new Set(),
+    });
+    expect(surplusOne.collected.map((entry) => entry.agentId)).toEqual([a.id]);
+    expect(surplusOne.failures).toEqual([]);
+    expect(manager.getAgent(a.id)).toBeNull();
+    expect(manager.getAgent(b.id)).not.toBeNull();
+    expect(manager.getAgent(c.id)).not.toBeNull();
+    expect(manager.getAgent(d.id)).not.toBeNull();
+
+    // Surplus of 1 again: closes the next-oldest (b).
+    const surplusTwo = await manager.enforceIdleAgentCap({
+      maxIdleAgents: 2,
+      protectedAgentIds: new Set(),
+    });
+    expect(surplusTwo.collected.map((entry) => entry.agentId)).toEqual([b.id]);
+
+    // Protecting the oldest remaining agent keeps it alive even when the cap is 0.
+    const protectedSweep = await manager.enforceIdleAgentCap({
+      maxIdleAgents: 0,
+      protectedAgentIds: new Set([c.id]),
+    });
+    expect(protectedSweep.collected.map((entry) => entry.agentId).sort()).toEqual([d.id]);
+    expect(manager.getAgent(c.id)).not.toBeNull();
+    expect(manager.getAgent(d.id)).toBeNull();
+  } finally {
+    await manager.flush().catch(() => undefined);
+    await storage.flush().catch(() => undefined);
+    rmSync(workdir, { recursive: true, force: true });
+  }
+});
+
+test("enforceIdleAgentCap is a no-op when the cap is not exceeded and tolerates negative caps", async () => {
+  const workdir = mkdtempSync(join(tmpdir(), "agent-manager-idle-cap-noop-"));
+  const manager = new AgentManager({
+    clients: { codex: new TestAgentClient() },
+    logger,
+  });
+
+  try {
+    await manager.createAgent({ provider: "codex", cwd: workdir }, undefined, {
+      workspaceId: undefined,
+    });
+
+    await expect(
+      manager.enforceIdleAgentCap({ maxIdleAgents: 5, protectedAgentIds: new Set() }),
+    ).resolves.toEqual({ collected: [], failures: [] });
+
+    await expect(
+      manager.enforceIdleAgentCap({ maxIdleAgents: -1, protectedAgentIds: new Set() }),
+    ).resolves.toEqual({ collected: [], failures: [] });
+  } finally {
+    await manager.flush().catch(() => undefined);
     rmSync(workdir, { recursive: true, force: true });
   }
 });

@@ -851,6 +851,7 @@ export class ScheduleService {
         agentManager: this.agentManager,
         agentStorage: this.agentStorage,
         logger: this.logger,
+        allowResumeClosed: true,
       });
       if (this.agentManager.hasInFlightRun(agent.id)) {
         throw new Error(`Agent ${agent.id} already has an active run`);

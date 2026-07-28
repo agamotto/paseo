@@ -252,6 +252,14 @@ export const PersistedConfigSchema = z
         enableTerminalAgentHooks: z.boolean().optional(),
         appendSystemPrompt: z.string().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
+        agents: z
+          .object({
+            keepIdleAgentsAlive: z.boolean().optional(),
+            maxIdleAgents: z.number().int().nonnegative().optional(),
+            idleAgentTimeoutMinutes: z.number().int().min(1).max(60).optional(),
+          })
+          .passthrough()
+          .optional(),
         cors: z
           .object({
             allowedOrigins: z.array(z.string()).optional(),

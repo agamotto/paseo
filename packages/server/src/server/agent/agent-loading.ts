@@ -34,6 +34,7 @@ export interface EnsureAgentLoadedDeps {
   validProviders?: Iterable<AgentProvider>;
   broadcastTimeline?: boolean;
   logger: Logger;
+  allowResumeClosed?: boolean;
 }
 
 export async function ensureUnarchivedAgentLoaded(
@@ -57,6 +58,15 @@ export async function ensureUnarchivedAgentLoaded(
   }
 
   return agent;
+}
+
+export class AgentClosedError extends Error {
+  readonly agentId: string;
+  constructor(agentId: string) {
+    super(`Agent is closed: ${agentId}`);
+    this.name = "AgentClosedError";
+    this.agentId = agentId;
+  }
 }
 
 export async function ensureAgentLoaded(
@@ -95,6 +105,10 @@ export async function ensureAgentLoaded(
     const record = await deps.agentStorage.get(agentId);
     if (!record) {
       throw new Error(`Agent not found: ${agentId}`);
+    }
+
+    if (record.lastStatus === "closed" && !deps.allowResumeClosed) {
+      throw new AgentClosedError(agentId);
     }
 
     const validProviders = deps.validProviders ?? deps.agentManager.getRegisteredProviderIds();

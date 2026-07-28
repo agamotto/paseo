@@ -89,6 +89,7 @@ import type {
   SubscribeTerminalResponse,
   SubscribeTerminalRequest,
   CloseItemsResponse,
+  CloseIdleAgentsResponse,
   KillTerminalResponse,
   CaptureTerminalResponse,
   TerminalInput,
@@ -486,6 +487,7 @@ type CreateTerminalPayload = CreateTerminalResponse["payload"];
 export type RenameTerminalResult = z.infer<typeof RenameTerminalResponseSchema>["payload"];
 type SubscribeTerminalPayload = SubscribeTerminalResponse["payload"];
 type CloseItemsPayload = CloseItemsResponse["payload"];
+type CloseIdleAgentsPayload = CloseIdleAgentsResponse["payload"];
 type KillTerminalPayload = KillTerminalResponse["payload"];
 type CaptureTerminalPayload = CaptureTerminalResponse["payload"];
 type ChatCreatePayload = Extract<
@@ -4894,6 +4896,20 @@ export class DaemonClient {
       requestId: resolvedRequestId,
       message,
       responseType: "close_items_response",
+      options: { skipQueue: true },
+    });
+  }
+
+  async closeIdleAgents(requestId?: string): Promise<CloseIdleAgentsPayload> {
+    const resolvedRequestId = this.createRequestId(requestId);
+    const message = SessionInboundMessageSchema.parse({
+      type: "close_idle_agents_request",
+      requestId: resolvedRequestId,
+    });
+    return this.sendCorrelatedRequest({
+      requestId: resolvedRequestId,
+      message,
+      responseType: "close_idle_agents_response",
       options: { skipQueue: true },
     });
   }

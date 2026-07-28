@@ -191,6 +191,7 @@ export async function sendPromptToAgent(
     agentManager: params.agentManager,
     agentStorage: params.agentStorage,
     logger: params.logger,
+    allowResumeClosed: true,
   });
 
   if (params.sessionMode) {

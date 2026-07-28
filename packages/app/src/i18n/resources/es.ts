@@ -1980,6 +1980,39 @@ export const es: TranslationResources = {
       },
       agents: {
         unavailable: "Connect to this host to manage agents",
+        keepIdleAgentsAlive: {
+          title: "Mantener agentes inactivos vivos",
+          hint: "Impide que Paseo cierre agentes que han estado inactivos, para que el proceso del agente subyacente permanezca en ejecución entre sesiones.",
+          accessibilityLabel: "Mantener agentes inactivos vivos",
+        },
+        idleAgentTimeout: {
+          title: "Tiempo de espera de inactividad",
+          hint: "Minutos antes de que un agente inactivo se cierre automáticamente. Predeterminado: 2.",
+          accessibilityLabel: "Tiempo de espera de inactividad en minutos",
+          error: "Introduce un número entero entre 1 y 60.",
+        },
+        maxIdleAgents: {
+          title: "Máx. de agentes inactivos",
+          hint: 'Límite de seguridad. Cuando "Mantener agentes inactivos vivos" está activado, los agentes inactivos más antiguos por encima de este conteo se eliminan. Predeterminado: 20.',
+          accessibilityLabel: "Máximo de agentes inactivos",
+          error: "Introduce un número entero entre 0 y 1000.",
+        },
+        closeIdleAgents: {
+          title: "Cerrar agentes inactivos",
+          hint: "{{count}} agente(s) inactivo(s) en el directorio. Cierra sus procesos; el historial se conserva.",
+          cta: "Cerrar {{count}}",
+          confirmMessage:
+            "Esto cerrará {{count}} agente(s) inactivo(s) y detendrá sus procesos subyacentes. Puedes reanudar cualquier agente cerrado desde el historial.",
+          confirmCta: "Cerrar {{count}} agente(s)",
+          errorTitle: "No se pudieron cerrar los agentes inactivos",
+          accessibilityLabel: "Cerrar agentes inactivos",
+          resultTitle: "Se cerraron {{closed}} agente(s) ({{failed}} con error)",
+          resultMessage:
+            "Se cerraron {{closed}} de {{total}} agente(s) inactivo(s) en el directorio; {{failed}} con error. Algunos pueden estar protegidos por programaciones o tener permisos pendientes.",
+          resultNoneTitle: "No se pudieron cerrar agentes",
+          resultNoneMessage:
+            "Paseo no cerró ninguno de los {{total}} agente(s) inactivo(s) en el directorio. Pueden ser agentes internos del sistema, estar protegidos por programaciones o tener permisos pendientes.",
+        },
       },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",

@@ -589,4 +589,41 @@ describe("DaemonConfigStore", () => {
       env: {},
     });
   });
+
+  test("patch persists agents.keepIdleAgentsAlive and agents.maxIdleAgents into config.json", () => {
+    const paseoHome = mkdtempSync(path.join(tmpdir(), "paseo-daemon-config-store-agents-"));
+    tempDirs.push(paseoHome);
+
+    const store = new DaemonConfigStore(
+      paseoHome,
+      {
+        mcp: { injectIntoAgents: false },
+        browserTools: { enabled: false },
+        agents: { keepIdleAgentsAlive: false, maxIdleAgents: 20 },
+        providers: {},
+        autoArchiveAfterMerge: false,
+        enableTerminalAgentHooks: false,
+        appendSystemPrompt: "",
+        metadataGeneration: { providers: [] },
+      },
+      undefined,
+    );
+
+    const next = store.patch({
+      agents: { keepIdleAgentsAlive: true, maxIdleAgents: 7 },
+    });
+
+    expect(next.agents).toEqual({
+      keepIdleAgentsAlive: true,
+      maxIdleAgents: 7,
+      idleAgentTimeoutMinutes: 2,
+    });
+
+    const persisted = loadPersistedConfig(paseoHome);
+    expect(persisted.daemon?.agents).toEqual({
+      keepIdleAgentsAlive: true,
+      maxIdleAgents: 7,
+      idleAgentTimeoutMinutes: 2,
+    });
+  });
 });

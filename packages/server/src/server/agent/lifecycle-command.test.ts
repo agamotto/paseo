@@ -6,6 +6,7 @@ import type { StoredAgentRecord } from "./agent-storage.js";
 import {
   archiveAgentCommand,
   cancelAgentRunCommand,
+  collectIdleAgentsCommand,
   detachAgentCommand,
   setAgentModeCommand,
   updateAgentCommand,
@@ -34,6 +35,14 @@ class FakeLifecycleAgentManager implements LifecycleAgentManager {
   readonly clearedAttentionAgentIds: string[] = [];
   readonly archivedAgentIds: string[] = [];
   readonly closedAgentIds: string[] = [];
+  readonly collectIdleAgentsCalls: Array<{
+    cutoff: Date;
+    protectedAgentIds: ReadonlySet<string>;
+  }> = [];
+  collectIdleAgentsResult: {
+    collected: Array<{ agentId: string; provider: "codex" }>;
+    failures: Array<{ agentId: string; provider: "codex"; error: unknown }>;
+  } = { collected: [], failures: [] };
   readonly metadataUpdates: Array<{
     agentId: string;
     updates: { title?: string; labels?: Record<string, string> };
@@ -102,6 +111,20 @@ class FakeLifecycleAgentManager implements LifecycleAgentManager {
   async closeAgent(agentId: string): Promise<void> {
     this.closedAgentIds.push(agentId);
     this.liveAgents.delete(agentId);
+  }
+
+  async collectIdleAgents(options: {
+    cutoff: Date;
+    protectedAgentIds: ReadonlySet<string>;
+  }): Promise<{
+    collected: Array<{ agentId: string; provider: "codex" }>;
+    failures: Array<{ agentId: string; provider: "codex"; error: unknown }>;
+  }> {
+    this.collectIdleAgentsCalls.push({
+      cutoff: options.cutoff,
+      protectedAgentIds: options.protectedAgentIds,
+    });
+    return this.collectIdleAgentsResult;
   }
 
   async setLabels(agentId: string, labels: Record<string, string>): Promise<void> {
@@ -331,6 +354,61 @@ describe("agent lifecycle commands", () => {
     ).resolves.toEqual({ modeId: "plan", notice: null });
 
     expect(manager.modeUpdates).toEqual([{ agentId: "agent-1", modeId: "plan" }]);
+  });
+
+  test("collectIdleAgentsCommand passes schedule-protected ids and far-future cutoff by default", async () => {
+    const storage = new FakeLifecycleAgentStorage();
+    const manager = new FakeLifecycleAgentManager(storage);
+    manager.collectIdleAgentsResult = {
+      collected: [{ agentId: "agent-1", provider: "codex" }],
+      failures: [],
+    };
+    const protectedIds = new Set<string>(["agent-scheduled"]);
+    const scheduleService = {
+      listActiveAgentTargetIds: async () => protectedIds,
+    };
+
+    const result = await collectIdleAgentsCommand({ agentManager: manager, scheduleService });
+
+    expect(result.collected).toEqual([{ agentId: "agent-1", provider: "codex" }]);
+    expect(result.failures).toEqual([]);
+    expect(manager.collectIdleAgentsCalls).toHaveLength(1);
+    expect(manager.collectIdleAgentsCalls[0]?.protectedAgentIds).toEqual(protectedIds);
+    // Default cutoff is far-future — every idle agent is eligible regardless of age.
+    expect(manager.collectIdleAgentsCalls[0]?.cutoff.getTime()).toBe(8640000000000000);
+  });
+
+  test("collectIdleAgentsCommand accepts an explicit cutoff", async () => {
+    const storage = new FakeLifecycleAgentStorage();
+    const manager = new FakeLifecycleAgentManager(storage);
+    const scheduleService = {
+      listActiveAgentTargetIds: async () => new Set<string>(),
+    };
+    const cutoff = new Date("2026-07-26T00:00:00.000Z");
+
+    await collectIdleAgentsCommand({ agentManager: manager, scheduleService }, { cutoff });
+
+    expect(manager.collectIdleAgentsCalls[0]?.cutoff).toEqual(cutoff);
+  });
+
+  test("collectIdleAgentsCommand surfaces failures from the manager", async () => {
+    const storage = new FakeLifecycleAgentStorage();
+    const manager = new FakeLifecycleAgentManager(storage);
+    const failureError = new Error("provider cleanup failed");
+    manager.collectIdleAgentsResult = {
+      collected: [],
+      failures: [{ agentId: "agent-2", provider: "codex", error: failureError }],
+    };
+    const scheduleService = {
+      listActiveAgentTargetIds: async () => new Set<string>(),
+    };
+
+    const result = await collectIdleAgentsCommand({ agentManager: manager, scheduleService });
+
+    expect(result.collected).toEqual([]);
+    expect(result.failures).toEqual([
+      { agentId: "agent-2", provider: "codex", error: failureError },
+    ]);
   });
 });
 

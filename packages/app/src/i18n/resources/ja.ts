@@ -1949,6 +1949,39 @@ export const ja: TranslationResources = {
       },
       agents: {
         unavailable: "エージェントを管理するにはこのホストに接続してください",
+        keepIdleAgentsAlive: {
+          title: "休止中のエージェントを保つ",
+          hint: "エージェントが休止中でも Paseo がクローズするのを防ぎ、伏せているエージェントプロセスがセッション間でも動作し続けるようにします。",
+          accessibilityLabel: "休止中のエージェントを保つ",
+        },
+        idleAgentTimeout: {
+          title: "休止タイムアウト",
+          hint: "休止中のエージェントが自動的に閉じられるまでの分数。デフォルト: 2。",
+          accessibilityLabel: "休止タイムアウト（分）",
+          error: "1から60の間の整数を入力してください。",
+        },
+        maxIdleAgents: {
+          title: "休止中エージェントの上限",
+          hint: "安全上限。「休止中のエージェントを保つ」がオンの時、この数を越える古い休止中エージェントが削除されます。デフォルト: 20。",
+          accessibilityLabel: "休止中エージェントの最大数",
+          error: "0か1000の間の整数を入力してください。",
+        },
+        closeIdleAgents: {
+          title: "休止中のエージェントを閉じる",
+          hint: "ディレクトリ内の休止中エージェント: {{count}}件。ランタイムを閉じます（履歴は保持されます）。",
+          cta: "{{count}}件を閉じる",
+          confirmMessage:
+            "{{count}}件の休止中エージェントを閉じ、基盤のプロセスを停止します。履歴から再開できます。",
+          confirmCta: "{{count}}件のエージェントを閉じる",
+          errorTitle: "休止中のエージェントを閉じられませんでした",
+          accessibilityLabel: "休止中のエージェントを閉じる",
+          resultTitle: "{{closed}}件のエージェントを閉じました（{{failed}}件は失敗）",
+          resultMessage:
+            "ディレクトリの{{total}}件中{{closed}}件を閉じました（残り{{failed}}件は失敗）。一部はスケジュールで保護されているか、保留中の権限がある可能性があります。",
+          resultNoneTitle: "閉じられるエージェントがありません",
+          resultNoneMessage:
+            "Paseoはディレクトリの{{total}}件の休止中エージェントをいずれも閉じませんでした。内部システムエージェント、スケジュールで保護されている、または保留中の権限がある可能性があります。",
+        },
       },
       workspaces: {
         unavailable: "ワークスペースを管理するにはこのホストに接続してください",

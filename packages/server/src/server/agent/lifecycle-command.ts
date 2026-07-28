@@ -4,9 +4,11 @@ import {
   AgentRunCancellationError,
   type AgentRunCancellationResult,
   type ManagedAgent,
+  type IdleAgentCollectionResult,
 } from "./agent-manager.js";
 import type { StoredAgentRecord } from "./agent-storage.js";
 import type { AgentProviderNotice } from "./agent-sdk-types.js";
+import { withTimeout } from "../../utils/promise-timeout.js";
 
 export type LifecycleAgentSnapshot = Pick<ManagedAgent, "id" | "cwd" | "lifecycle">;
 
@@ -18,6 +20,10 @@ export interface LifecycleAgentManager {
   archiveAgent(agentId: string): Promise<{ archivedAt: string }>;
   archiveSnapshot(agentId: string, archivedAt: string): Promise<StoredAgentRecord>;
   closeAgent(agentId: string): Promise<void>;
+  collectIdleAgents(options: {
+    cutoff: Date;
+    protectedAgentIds: ReadonlySet<string>;
+  }): Promise<IdleAgentCollectionResult>;
   setLabels(agentId: string, labels: Record<string, string>): Promise<void>;
   detachAgent(agentId: string): Promise<{
     record: StoredAgentRecord;
@@ -149,6 +155,30 @@ export async function closeAgentCommand(
   agentId: string,
 ): Promise<void> {
   await dependencies.agentManager.closeAgent(agentId);
+}
+
+export interface CloseIdleAgentsResult {
+  collected: IdleAgentCollectionResult["collected"];
+  failures: IdleAgentCollectionResult["failures"];
+}
+
+export async function collectIdleAgentsCommand(
+  dependencies: {
+    agentManager: LifecycleAgentManager;
+    scheduleService: { listActiveAgentTargetIds(): Promise<ReadonlySet<string>> };
+  },
+  options: { cutoff: Date } = { cutoff: new Date(8640000000000000) },
+): Promise<CloseIdleAgentsResult> {
+  const protectedAgentIds = await withTimeout(
+    dependencies.scheduleService.listActiveAgentTargetIds(),
+    5_000,
+    "scheduleService.listActiveAgentTargetIds timed out after 5s",
+  );
+  const result = await dependencies.agentManager.collectIdleAgents({
+    cutoff: options.cutoff,
+    protectedAgentIds,
+  });
+  return { collected: result.collected, failures: result.failures };
 }
 
 export interface UpdateAgentResult {

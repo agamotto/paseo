@@ -139,6 +139,15 @@ const MutableBrowserToolsConfigSchema = z
     enabled: z.boolean().default(false),
   })
   .passthrough();
+
+const MutableAgentsConfigSchema = z
+  .object({
+    keepIdleAgentsAlive: z.boolean().default(false),
+    maxIdleAgents: z.number().int().nonnegative().default(20),
+    idleAgentTimeoutMinutes: z.number().int().min(1).max(60).default(2),
+  })
+  .passthrough();
+
 export const MutableDaemonConfigSchema = z
   .object({
     mcp: z
@@ -147,6 +156,11 @@ export const MutableDaemonConfigSchema = z
       })
       .passthrough(),
     browserTools: MutableBrowserToolsConfigSchema.default({ enabled: false }),
+    agents: MutableAgentsConfigSchema.default({
+      keepIdleAgentsAlive: false,
+      maxIdleAgents: 20,
+      idleAgentTimeoutMinutes: 2,
+    }),
     providers: z.record(z.string(), MutableDaemonProviderConfigSchema).default({}),
     metadataGeneration: MutableMetadataGenerationConfigSchema.default({ providers: [] }),
     autoArchiveAfterMerge: z.boolean().default(false),
@@ -160,6 +174,7 @@ export const MutableDaemonConfigPatchSchema = z
   .object({
     mcp: MutableDaemonConfigSchema.shape.mcp.partial().optional(),
     browserTools: MutableBrowserToolsConfigSchema.partial().optional(),
+    agents: MutableAgentsConfigSchema.partial().optional(),
     providers: z
       .record(z.string(), MutableDaemonProviderConfigSchema.partial().passthrough())
       .optional(),
@@ -802,6 +817,11 @@ export const CloseItemsRequestMessageSchema = z.object({
   type: z.literal("close_items_request"),
   agentIds: z.array(z.string()).default([]),
   terminalIds: z.array(z.string()).default([]),
+  requestId: z.string(),
+});
+
+export const CloseIdleAgentsRequestMessageSchema = z.object({
+  type: z.literal("close_idle_agents_request"),
   requestId: z.string(),
 });
 
@@ -2449,6 +2469,7 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   DeleteAgentRequestMessageSchema,
   ArchiveAgentRequestMessageSchema,
   CloseItemsRequestMessageSchema,
+  CloseIdleAgentsRequestMessageSchema,
   UpdateAgentRequestMessageSchema,
   ProjectRenameRequestSchema,
   ProjectRemoveRequestSchema,
@@ -3927,6 +3948,15 @@ export const CloseItemsResponseSchema = z.object({
   }),
 });
 
+export const CloseIdleAgentsResponseSchema = z.object({
+  type: z.literal("close_idle_agents_response"),
+  payload: z.object({
+    closedAgentIds: z.array(z.string()),
+    failedAgentIds: z.array(z.string()),
+    requestId: z.string(),
+  }),
+});
+
 const AheadBehindSchema = z.object({
   ahead: z.number(),
   behind: z.number(),
@@ -5249,6 +5279,7 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   AgentDeletedMessageSchema,
   AgentArchivedMessageSchema,
   CloseItemsResponseSchema,
+  CloseIdleAgentsResponseSchema,
   CheckoutStatusResponseSchema,
   CheckoutStatusUpdateSchema,
   SubscribeCheckoutDiffResponseSchema,
@@ -5744,6 +5775,8 @@ export type TerminalCursor = z.infer<typeof TerminalCursorSchema>;
 export type TerminalState = z.infer<typeof TerminalStateSchema>;
 export type CloseItemsRequest = z.infer<typeof CloseItemsRequestMessageSchema>;
 export type CloseItemsResponse = z.infer<typeof CloseItemsResponseSchema>;
+export type CloseIdleAgentsRequest = z.infer<typeof CloseIdleAgentsRequestMessageSchema>;
+export type CloseIdleAgentsResponse = z.infer<typeof CloseIdleAgentsResponseSchema>;
 export type KillTerminalRequest = z.infer<typeof KillTerminalRequestSchema>;
 export type KillTerminalResponse = z.infer<typeof KillTerminalResponseSchema>;
 export type CaptureTerminalRequest = z.infer<typeof CaptureTerminalRequestSchema>;

@@ -1931,6 +1931,39 @@ export const ar: TranslationResources = {
       },
       agents: {
         unavailable: "Connect to this host to manage agents",
+        keepIdleAgentsAlive: {
+          title: "إبقاء الوكلاء الخاملين نشطين",
+          hint: "يمنع Paseo من إغلاق الوكلاء الخاملين، حتى تظل عملية الوكيل تعمل بين الجلسات.",
+          accessibilityLabel: "إبقاء الوكلاء الخاملين نشطين",
+        },
+        idleAgentTimeout: {
+          title: "مهلة الخمول",
+          hint: "الدقائق قبل إغلاق الوكيل الخامل تلقائياً. الافتراضي: 2.",
+          accessibilityLabel: "مهلة الخمول بالدقائق",
+          error: "أدخل عددًا صحيحًا بين 1 و 60.",
+        },
+        maxIdleAgents: {
+          title: "الحد الأقصى للوكلاء الخاملين",
+          hint: 'حد أمان. عندما يكون "إبقاء الوكلاء الخاملين نشطين" مفعّلاً، يتم حذف أقدم الوكلاء الخاملين بعد هذا العدد. الافتراضي: 20.',
+          accessibilityLabel: "الحد الأقصى للوكلاء الخاملين",
+          error: "أدخل عددًا صحيحًا بين 0 و 1000.",
+        },
+        closeIdleAgents: {
+          title: "إغلاق الوكلاء الخاملين",
+          hint: "{{count}} وكيل خامل في الدليل. يغلق عملياتهم؛ يتم الاحتفاظ بالسجل.",
+          cta: "إغلاق {{count}}",
+          confirmMessage:
+            "سيؤدي هذا إلى إغلاق {{count}} وكيل خامل وإيقاف عملياتهم الأساسية. يمكنك استئناف أي وكيل مغلق من السجل.",
+          confirmCta: "إغلاق {{count}} وكيل",
+          errorTitle: "تعذر إغلاق الوكلاء الخاملين",
+          accessibilityLabel: "إغلاق الوكلاء الخاملين",
+          resultTitle: "تم إغلاق {{closed}} وكيل({{failed}} فشل)",
+          resultMessage:
+            "تم إغلاق {{closed}} من أصل {{total}} وكيل خامل في الدليل؛ فشل {{failed}}. قد يكون بعضها محميًا بجداول أو لديه أذونات معلقة.",
+          resultNoneTitle: "لا يوجد وكلاء يمكن إغلاقهم",
+          resultNoneMessage:
+            "لم يقم Paseo بإغلاق أي من {{total}} وكيل(وكلاء) الخاملين في الدليل. قد تكون وكلاء نظام داخليين، أو محميين بجداول، أو لديهم أذونات معلقة.",
+        },
       },
       workspaces: {
         unavailable: "Connect to this host to manage workspaces",

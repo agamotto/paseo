@@ -2201,6 +2201,129 @@ test("close_items_request continues after an archive failure", async () => {
   expect(sessionLogger.warn).toHaveBeenCalled();
 });
 
+test("close_idle_agents_request collects idle agents via collectIdleAgentsCommand and returns closed/failed ids", async () => {
+  const emitted: SessionOutboundMessage[] = [];
+  const sessionLogger = {
+    child: () => sessionLogger,
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  };
+  const collectIdleAgents = vi.fn(async () => ({
+    collected: [
+      { agentId: "agent-idle-1", provider: "codex" },
+      { agentId: "agent-idle-2", provider: "codex" },
+    ],
+    failures: [{ agentId: "agent-broken", provider: "codex", error: new Error("boom") }],
+  }));
+  const listActiveAgentTargetIds = vi.fn(async () => new Set<string>(["agent-scheduled"]));
+  const session = asTestSession(
+    new Session({
+      clientId: "test-client",
+      scopes: ["*"],
+      onMessage: (message) => emitted.push(message),
+      logger: asSessionLogger(sessionLogger),
+      downloadTokenStore: asDownloadTokenStore(),
+      pushTokenStore: asPushTokenStore(),
+      paseoHome: "/tmp/paseo-test",
+      agentManager: asAgentManager({
+        subscribe: () => () => {},
+        listAgents: () => [],
+        collectIdleAgents,
+      }),
+      agentStorage: asAgentStorage({
+        list: async () => [],
+      }),
+      projectRegistry: {
+        initialize: async () => {},
+        existsOnDisk: async () => true,
+        list: async () => [],
+        get: async () => null,
+        upsert: async () => {},
+        archive: async () => {},
+        remove: async () => {},
+      },
+      workspaceRegistry: {
+        initialize: async () => {},
+        existsOnDisk: async () => true,
+        list: async () => [],
+        get: async () => null,
+        upsert: async () => {},
+        archive: async () => {},
+        remove: async () => {},
+      },
+      chatService: asChatService(),
+      scheduleService: asScheduleService(),
+      loopService: asLoopService(),
+      checkoutDiffManager: asCheckoutDiffManager({
+        subscribe: async () => ({
+          initial: { cwd: "/tmp", files: [], error: null },
+          unsubscribe: () => {},
+        }),
+        scheduleRefreshForCwd: () => {},
+        onWorkspaceStateMayHaveChanged: () => {},
+        invalidateForge: () => {},
+        getMetrics: () => ({
+          checkoutDiffTargetCount: 0,
+          checkoutDiffSubscriptionCount: 0,
+          checkoutDiffWatcherCount: 0,
+          checkoutDiffFallbackRefreshTargetCount: 0,
+        }),
+        dispose: () => {},
+      }),
+      workspaceGitService: createNoopWorkspaceGitService(),
+      daemonConfigStore: asDaemonConfigStore({
+        get: () => ({ mcp: { injectIntoAgents: false }, providers: {} }),
+        onChange: () => () => {},
+      }),
+      mcpBaseUrl: null,
+      stt: null,
+      tts: null,
+      providerSnapshotManager: createProviderSnapshotManagerStub().manager,
+      terminalManager: asTerminalManager({
+        killTerminal: vi.fn(),
+        subscribeTerminalsChanged: () => () => {},
+      }),
+    }),
+  );
+
+  // Override scheduleService.listActiveAgentTargetIds — asScheduleService() returns a generic
+  // stub. Cast through internals to inject the specific method behavior we need.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (
+    session as unknown as {
+      scheduleService: { listActiveAgentTargetIds: typeof listActiveAgentIds };
+    }
+  ).scheduleService.listActiveAgentTargetIds = listActiveAgentTargetIds;
+
+  await session.handleMessage({
+    type: "close_idle_agents_request",
+    requestId: "req-close-idle",
+  });
+
+  // The handler must call collectIdleAgents with epoch cutoff (collectIdleAgentsCommand default)
+  // and the schedule-provided protected ids.
+  expect(collectIdleAgents).toHaveBeenCalledTimes(1);
+  expect(collectIdleAgents).toHaveBeenCalledWith({
+    cutoff: expect.any(Date),
+    protectedAgentIds: new Set(["agent-scheduled"]),
+  });
+  const firstCallArgs = collectIdleAgents.mock.calls[0]?.[0];
+  expect(firstCallArgs).toBeDefined();
+  expect((firstCallArgs as { cutoff: Date }).cutoff.getTime()).toBe(8640000000000000);
+  expect(listActiveAgentTargetIds).toHaveBeenCalledTimes(1);
+
+  expect(emitted.find((message) => message.type === "close_idle_agents_response")?.payload).toEqual(
+    {
+      closedAgentIds: ["agent-idle-1", "agent-idle-2"],
+      failedAgentIds: ["agent-broken"],
+      requestId: "req-close-idle",
+    },
+  );
+});
+
 test("non-git workspace uses deterministic directory name and no unknown branch fallback", async () => {
   const session = createSessionForWorkspaceTests();
   session.workspaceRegistry.list = async () => [

@@ -215,8 +215,8 @@ import { DaemonExecutions } from "./hub/daemon-executions.js";
 
 const MAX_MCP_DEBUG_BATCH_ITEMS = 10;
 const REDACTED_LOG_VALUE = "[redacted]";
-const IDLE_AGENT_RUNTIME_TTL_MS = 30 * 60 * 1000;
 const IDLE_AGENT_RUNTIME_SWEEP_INTERVAL_MS = 60 * 1000;
+const DEFAULT_MAX_IDLE_AGENTS = 20;
 const DOWNLOAD_OPEN_FLAGS =
   process.platform === "win32" ? constants.O_RDONLY : constants.O_RDONLY | constants.O_NOFOLLOW;
 
@@ -391,6 +391,9 @@ export interface PaseoDaemonConfig {
   enableTerminalAgentHooks?: boolean;
   appendSystemPrompt?: string;
   terminalProfiles?: TerminalProfile[];
+  keepIdleAgentsAlive?: boolean;
+  maxIdleAgents?: number;
+  idleAgentTimeoutMinutes?: number;
   staticDir: string;
   mcpDebug: boolean;
   isDev?: boolean;
@@ -511,6 +514,11 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
   const initialConfig: MutableDaemonConfig = {
     mcp: { injectIntoAgents: config.mcpInjectIntoAgents ?? true },
     browserTools: { enabled: config.browserToolsEnabled ?? false },
+    agents: {
+      keepIdleAgentsAlive: config.keepIdleAgentsAlive ?? false,
+      maxIdleAgents: config.maxIdleAgents ?? 20,
+      idleAgentTimeoutMinutes: config.idleAgentTimeoutMinutes ?? 2,
+    },
     providers,
     metadataGeneration: {
       providers: config.metadataGeneration?.providers ?? [],
@@ -1197,7 +1205,27 @@ export async function createPaseoDaemon(
   let inFlightIdleAgentCollection: Promise<void> | null = null;
   const collectIdleAgentRuntimes = async () => {
     const protectedAgentIds = await scheduleService.listActiveAgentTargetIds();
-    const cutoff = new Date(Date.now() - IDLE_AGENT_RUNTIME_TTL_MS);
+    const agentsConfig = daemonConfigStore.get().agents;
+    if (agentsConfig?.keepIdleAgentsAlive === true) {
+      const maxIdleAgents =
+        typeof agentsConfig.maxIdleAgents === "number"
+          ? agentsConfig.maxIdleAgents
+          : DEFAULT_MAX_IDLE_AGENTS;
+      const result = await agentManager.enforceIdleAgentCap({ maxIdleAgents, protectedAgentIds });
+      for (const collected of result.collected) {
+        logger.info(collected, "Pruned idle agent above keep-alive cap");
+      }
+      for (const failure of result.failures) {
+        const { error, ...context } = failure;
+        logger.warn({ ...context, err: error }, "Failed to prune idle agent above keep-alive cap");
+      }
+      return;
+    }
+    const idleAgentTimeoutMinutes =
+      typeof agentsConfig?.idleAgentTimeoutMinutes === "number"
+        ? agentsConfig.idleAgentTimeoutMinutes
+        : 2;
+    const cutoff = new Date(Date.now() - idleAgentTimeoutMinutes * 60 * 1000);
     const result = await agentManager.collectIdleAgents({ cutoff, protectedAgentIds });
     for (const collected of result.collected) {
       logger.info(collected, "Collected idle agent runtime");

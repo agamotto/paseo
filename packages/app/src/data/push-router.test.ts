@@ -36,6 +36,7 @@ type RouterClient = Parameters<typeof mountServerDataPushRouter>[0]["client"];
 const daemonConfig: MutableDaemonConfig = {
   mcp: { injectIntoAgents: true },
   browserTools: { enabled: false },
+  agents: { keepIdleAgentsAlive: false, maxIdleAgents: 20, idleAgentTimeoutMinutes: 2 },
   providers: {},
   metadataGeneration: { providers: [] },
   autoArchiveAfterMerge: false,
